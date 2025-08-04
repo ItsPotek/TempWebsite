@@ -1,75 +1,121 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Number Scanner</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+  <link
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
+    rel="stylesheet"
+  />
   <style>
     #video {
       width: 100%;
-      height: auto;
       border-radius: 10px;
     }
+
+    #scan-area {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 60%;
+      height: 30%;
+      transform: translate(-50%, -50%);
+      border: 3px dashed rgba(255, 255, 255, 0.8);
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+      pointer-events: none;
+    }
+
+    .video-wrapper {
+      position: relative;
+    }
+
     #canvas {
       display: none;
     }
   </style>
 </head>
 <body class="bg-light">
+  <div class="container py-4">
+    <h2 class="text-center mb-4">Scan a Number</h2>
 
-<div class="container py-4">
-  <h2 class="text-center mb-4">Scan a Number</h2>
-  
-  <div class="mb-3">
-    <video id="video" autoplay playsinline></video>
-    <canvas id="canvas"></canvas>
+    <div class="video-wrapper mb-3">
+      <video id="video" autoplay playsinline></video>
+      <div id="scan-area"></div>
+      <canvas id="canvas"></canvas>
+    </div>
+
+    <div class="d-grid mb-3">
+      <button id="scanBtn" class="btn btn-primary btn-lg">Scan</button>
+    </div>
+
+    <div class="text-center">
+      <h4>Detected Number:</h4>
+      <p id="result" class="fw-bold fs-3 text-success">None</p>
+    </div>
   </div>
-  
-  <div class="d-grid mb-3">
-    <button id="scanBtn" class="btn btn-primary btn-lg">Scan</button>
-  </div>
-  
-  <div class="text-center">
-    <h4>Detected Number:</h4>
-    <p id="result" class="fw-bold fs-3 text-success">None</p>
-  </div>
-</div>
 
-<!-- JS dependencies -->
-<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.0.4/dist/tesseract.min.js"></script>
+  <!-- Dependencies -->
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.0.4/dist/tesseract.min.js"></script>
 
-<script>
-  const video = document.getElementById('video');
-  const canvas = document.getElementById('canvas');
-  const resultText = $('#result');
+  <script>
+    const video = document.getElementById("video");
+    const canvas = document.getElementById("canvas");
+    const resultText = $("#result");
 
-  // Access the camera
-  navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-    .then(stream => {
-      video.srcObject = stream;
-    })
-    .catch(err => {
-      alert('Error accessing camera: ' + err);
+    // Start camera
+    navigator.mediaDevices
+      .getUserMedia({ video: { facingMode: "environment" } })
+      .then((stream) => {
+        video.srcObject = stream;
+      })
+      .catch((err) => {
+        alert("Camera error: " + err);
+      });
+
+    $("#scanBtn").on("click", () => {
+      const videoWidth = video.videoWidth;
+      const videoHeight = video.videoHeight;
+
+      // Set canvas size
+      canvas.width = videoWidth;
+      canvas.height = videoHeight;
+
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(video, 0, 0, videoWidth, videoHeight);
+
+      // Define crop area (same as #scan-area, relative to video)
+      const cropWidth = videoWidth * 0.6;
+      const cropHeight = videoHeight * 0.3;
+      const cropX = (videoWidth - cropWidth) / 2;
+      const cropY = (videoHeight - cropHeight) / 2;
+
+      const croppedImage = ctx.getImageData(cropX, cropY, cropWidth, cropHeight);
+
+      // Grayscale preprocessing
+      const data = croppedImage.data;
+      for (let i = 0; i < data.length; i += 4) {
+        const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
+        data[i] = data[i + 1] = data[i + 2] = avg; // grayscale
+      }
+
+      // Draw preprocessed cropped image on canvas
+      canvas.width = cropWidth;
+      canvas.height = cropHeight;
+      ctx.putImageData(croppedImage, 0, 0);
+
+      // Run OCR on cropped grayscale image
+      Tesseract.recognize(canvas, 'eng', {
+        logger: m => console.log(m),
+        tessedit_char_whitelist: '0123456789' // try digit-only (may not always apply in browser)
+      }).then(({ data: { text } }) => {
+        const number = text.match(/\d+/g);
+        resultText.text(number ? number.join(" ") : "No number detected");
+      });
     });
-
-  $('#scanBtn').on('click', () => {
-    const ctx = canvas.getContext('2d');
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-    Tesseract.recognize(canvas, 'eng', {
-      logger: m => console.log(m)
-    }).then(({ data: { text } }) => {
-      const number = text.match(/\d+/g); // Find numbers only
-      resultText.text(number ? number.join(' ') : 'No number detected');
-    });
-  });
-</script>
-
+  </script>
 </body>
 </html>
